@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts run on Linux (the RFSoC board) -- always LF, regardless of
+# what platform checks this repo out, so they aren't broken by scp'ing a
+# Windows working copy over.
+*.sh text eol=lf
