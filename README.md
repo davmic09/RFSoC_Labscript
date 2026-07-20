@@ -10,10 +10,12 @@ labscript experiment shot.
   worker/tab, registration). Drop this into any labscript profile's `user_devices` folder.
 - **`board_setup/`** -- scripts to set up the Pyro4 control server on a PYNQ-based RFSoC board
   (RFSoC4x2, ZCU216, ZCU111, ...) so a labscript `QICKBoard` can reach it over the network.
-- **`examples/`** -- runnable examples verified against real RFSoC4x2 hardware through
-  runmanager/BLACS: `example_qick_rfsoc4x2.py` (software trigger) and
-  `example_qick_hardware_trigger.py` (real hardware trigger pulse), plus `qick_programs.py`
-  (the tProc programs they use). See "Operating the RFSoC" below.
+- **`examples/`** -- runnable examples. Verified against real RFSoC4x2 hardware through
+  runmanager/BLACS: `example_qick_rfsoc4x2.py` (software trigger), `example_qick_hardware_trigger.py`
+  (real hardware trigger pulse, values tracked via runmanager globals), and `qick_programs.py`
+  (the tProc v1 programs they use). **Not** verified against real hardware (no ZCU216 available):
+  `example_qick_zcu216_v2_hardware_trigger.py` + `qick_programs_v2.py`, the tProc v2 analogue for a
+  ZCU216. See "Operating the RFSoC" and "ZCU216 / tProc v2" below.
 - **`patch_labscript_numpy2.py`** -- one-time fix for labscript 3.4.2 on NumPy 2 / Python 3.13
   (see "Prerequisites" below). Not RFSoC/QICK-specific -- needed for labscript itself to run here.
 - **`compile_shot.py`** -- headless labscript compiler, for validating a connection table /
@@ -181,6 +183,82 @@ the physical wire, or the trigger-to-pulse latency -- that requires a scope on b
 pin and the RFSoC's DAC output, which hasn't been done. If you wire this up, that's the part to
 check first.
 
+## Tracking pulse parameters as runmanager globals
+
+By default, `tproc_program_kwargs` is a fixed dict baked into the connection table at
+`QICKBoard(...)` construction time -- fine for getting started, but not tracked anywhere per-shot.
+To make it a real, per-shot-recorded experiment parameter (sweepable, visible in lyse, etc.),
+don't pass `tproc_program_kwargs` to the constructor at all; instead call
+`qick_board.set_tproc_program_kwargs({...})` from your experiment script's `__main__`/top-level
+logic, using bare runmanager global names as the values:
+
+```python
+qick_board = QICKBoard(
+    name='qick_board', ns_host=..., ns_port=..., proxy_name=..., board_model=...,
+    tproc_program_module=..., tproc_program_class=...,
+    # no tproc_program_kwargs here
+)
+
+start()
+qick_board.set_tproc_program_kwargs({
+    "res_ch": res_ch, "pulse_freq": pulse_freq, "pulse_gain": pulse_gain,
+    "pulse_length_us": pulse_length_us, "res_phase": res_phase, "reps": reps,
+})  # res_ch, pulse_freq, etc. are runmanager globals -- define them in runmanager first
+qick_board.start_tproc(t=1.0, duration=5e-6)
+stop(2.0)
+```
+
+runmanager resolves those bare names from whatever globals you've defined (Add group -> add each
+name -> set a value, in the GUI) and records the actual values used into the shot's own
+`/globals` group -- confirmed via a headless test with a hand-built globals file: the shot's
+`/globals/qick_pulse` group held `{'pulse_freq': '110', ...}` and `qick_board`'s
+`device_properties.tproc_program_kwargs` correctly held the resolved real values (`110` as an
+int, not the string).
+
+**Why not just pass globals straight into the constructor?** Because `QICKBoard(...)` runs at
+module level, unconditionally -- including when BLACS just imports the file to build its device
+list (no globals available then). `set_tproc_program_kwargs()` only needs to run when actually
+compiling a shot (inside `__main__`, guarded), which is exactly when runmanager has already
+resolved the globals. Don't do this in `connection_table.py` itself, though, if that file's
+`__main__` block is what BLACS's own "recompile connection table" action re-runs -- that action
+only supplies globals if BLACS's connection table plugin is explicitly configured with a globals
+file (usually isn't), so bare global names there would break it with a `NameError`. Keep
+`connection_table.py`'s own embedded smoke-test hardcoded, and put the globals-tracked version in
+a dedicated example script that's only ever submitted as an ordinary runmanager shot (see
+`examples/example_qick_hardware_trigger.py`).
+
+## ZCU216 / tProc v2
+
+`examples/example_qick_zcu216_v2_hardware_trigger.py` + `examples/qick_programs_v2.py` mirror the
+RFSoC4x2 hardware-trigger example for a ZCU216 running tProc v2 firmware. **Not verified against
+real hardware** -- there's no ZCU216 in this setup, so treat this as a starting point, not a
+proven example. What differs from the v1 example, and why:
+
+- tProc v2's program API is meaningfully different: `_initialize(cfg)`/`_body(cfg)` (leading
+  underscore, unlike v1's `initialize`/`body`), and `add_pulse()` takes physical units directly
+  (MHz, us, degrees, and a normalized 0-1 gain) -- no manual `freq2reg()`/`us2cycles()` conversion
+  needed, unlike v1. Pulses are named in `_initialize()`, then scheduled with `self.pulse(ch=...,
+  name=..., t=...)` in `_body()`.
+- `AveragerProgramV2.__init__()` takes `reps`/`final_delay` as explicit top-level constructor
+  arguments rather than packed inside `cfg` like v1's `AveragerProgram`.
+  `HardwareTriggeredPulseProgramV2` wraps this so the outer constructor signature stays
+  `(soccfg, cfg)`, matching exactly what `QICKBoardWorker` already calls
+  (`cls(self.soccfg, props["tproc_program_kwargs"])`) -- **no worker code changes were needed** to
+  support v2 programs; `QickProgram.run()` (which the worker calls) is defined on a shared base
+  class (`AbsQickProgram`) both v1 and v2 program hierarchies inherit from.
+- The hardware-trigger mechanism itself is identical to the RFSoC4x2 example -- same PMOD1 pin 0,
+  same `trigger_mode='hardware'`, same PrawnBlaster-clockline-pin wiring approach. Nothing about
+  triggering is v2-specific; only the pulse-programming API differs.
+- On the board side, set `BOARD=ZCU216` (not `RFSoC4x2`) when running
+  `board_setup/setup_qick_board.sh` there -- that's what makes `QickSoc` auto-select `qick_216.bit`
+  instead of `qick_4x2.bit`.
+
+Before trusting this example, fill in the real ZCU216 IP (currently a placeholder,
+`'192.168.1.XXX'`), confirm `ns_port`/`proxy_name` against however `pyro_service.py` was actually
+launched on that board, and validate `HardwareTriggeredPulseProgramV2` standalone against the
+real hardware first (`make_proxy()` + `prog.run(soc, start_src='internal')`) -- exactly the same
+validation sequence used for the v1 program on the RFSoC4x2, just not yet done here.
+
 ### Current limitations
 
 - **Your connection table needs a real `PseudoclockDevice` somewhere, even though `QICKBoard`
@@ -203,8 +281,10 @@ check first.
 - **No data retrieval.** Acquired ADC/readout data isn't pulled back into the shot's HDF5 file.
   You'd need to extend the worker's `transition_to_manual` (e.g. via `soc.poll_data()`) to add
   this -- not implemented here.
-- **One fixed program per connection table entry.** No per-shot program/parameter selection via
-  runmanager globals.
+- **The tProc program module/class itself is still fixed per connection table entry.** Only the
+  *values* passed to it (`tproc_program_kwargs`) can be tracked as runmanager globals (see above)
+  -- swapping to a different program class per shot isn't wired up.
 - **Multiple RFSoC boards** (e.g. porting from an RFSoC4x2 to a ZCU216) should only need a new
   `ns_host`/`board_model` and a fresh `board_setup/setup_qick_board.sh` run on that board -- the
-  underlying trigger mechanism and Pyro4 control plane are the same across boards.
+  underlying trigger mechanism and Pyro4 control plane are the same across boards. See "ZCU216 /
+  tProc v2" above for a (not yet hardware-verified) worked example.

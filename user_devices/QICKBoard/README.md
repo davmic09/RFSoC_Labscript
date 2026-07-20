@@ -46,12 +46,20 @@ qick_board = QICKBoard(
 In your experiment script:
 
 ```python
-qick_board.start_tproc(t=0.5)  # metadata only in this MVP -- see Limitations
+qick_board.start_tproc(t=0.5)  # metadata only in software mode -- see root README
 ```
 
 `tproc_program_module`/`tproc_program_class` must name an importable `QickProgram`/
 `AveragerProgram` subclass, resolved inside the BLACS worker process via
-`labscript_utils.device_registry.import_class_by_fullname`.
+`labscript_utils.device_registry.import_class_by_fullname`. Works for tProc v1 and v2 program
+classes alike, since `run()` (which the worker calls) is defined once on a shared base class.
+
+To track `tproc_program_kwargs` values as runmanager globals instead of fixing them in the
+connection table, omit that argument from the constructor and call
+`qick_board.set_tproc_program_kwargs({...})` from your experiment script instead (values sourced
+from runmanager globals). See the root README's "Tracking pulse parameters as runmanager globals"
+section -- there's a real gotcha around *where* you do this if the same file is also BLACS's own
+connection table.
 
 ## Limitations (by design, this pass)
 
@@ -64,5 +72,5 @@ qick_board.start_tproc(t=0.5)  # metadata only in this MVP -- see Limitations
   program to finish or pull back acquired data -- QICK/Pyro4 has no blocking "done" RPC. Both are
   planned follow-ups (a WaitMonitor-based hardware loopback, and a `transition_to_manual`
   extension modeled on `IMAQdxCamera`'s image-saving pattern, respectively).
-- **One fixed program per connection table entry.** No per-shot program/parameter selection via
-  runmanager globals yet.
+- **The program module/class itself is still fixed per connection table entry** -- only its
+  keyword-argument values can be tracked as runmanager globals, not which program class runs.

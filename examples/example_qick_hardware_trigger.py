@@ -21,6 +21,15 @@ and the RFSoC's DAC 0 output (or PMOD1 pin 0 itself) for the resulting
 110MHz pulse shortly after. Exact trigger-to-pulse latency has not been
 measured -- see the project README's "Current limitations" for what's
 verified vs. not.
+
+PULSE PARAMETERS ARE RUNMANAGER GLOBALS: res_ch, pulse_freq, pulse_gain,
+pulse_length_us, res_phase, reps below are bare names, not literals --
+runmanager resolves them from its globals system and records the actual
+values used into this shot's own /globals group, so they're tracked per-shot
+rather than fixed in the connection table. Define them as globals in
+runmanager before loading this script (Add group -> add each name -> set a
+value), or see create_test_globals_file() in this repo's dev/test tooling
+for a headless equivalent.
 """
 from labscript import start, stop
 from labscript_devices.PrawnBlaster.labscript_devices import PrawnBlaster
@@ -47,13 +56,18 @@ qick_board = QICKBoard(
     connection='port0/line0',
     tproc_program_module='labscriptlib.RFSoCLabscript.qick_programs',
     tproc_program_class='HardwareTriggeredPulseProgram',
-    tproc_program_kwargs={
-        "res_ch": 0, "pulse_freq": 110, "pulse_gain": 3000,
-        "pulse_length_us": 1.0, "res_phase": 0, "reps": 1,
-    },
+    # No tproc_program_kwargs here -- set below from runmanager globals via
+    # set_tproc_program_kwargs(), so the real per-shot values get tracked in
+    # the shot's HDF5 file. A connection-table-only import (BLACS's own
+    # "recompile connection table" step) never reaches that call, so no
+    # globals are needed just to build the connection table.
 )
 
 start()
+qick_board.set_tproc_program_kwargs({
+    "res_ch": res_ch, "pulse_freq": pulse_freq, "pulse_gain": pulse_gain,
+    "pulse_length_us": pulse_length_us, "res_phase": res_phase, "reps": reps,
+})
 # duration=5us for the trigger pulse itself -- DummyIntermediateDevice's
 # clock_limit caps minimum instruction spacing at 1us, so 1us exactly was
 # right at that boundary and failed to compile. The trigger pulse's width is

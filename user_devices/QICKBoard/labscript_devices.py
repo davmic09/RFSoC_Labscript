@@ -88,6 +88,25 @@ class QICKBoard(TriggerableDevice):
         else:
             TriggerableDevice.__init__(self, name, parent_device, connection, **kwargs)
 
+    def set_tproc_program_kwargs(self, tproc_program_kwargs):
+        """Override this shot's tProc program cfg dict.
+
+        Call this from your experiment script's __main__ block, with values
+        sourced from runmanager globals (bare names runmanager resolves and
+        records into the shot's own /globals group), so parameters are
+        tracked per-shot instead of fixed once at connection-table-definition
+        time. Must be called *after* construction but *before* stop() --
+        the __init__-time value set via @set_passed_properties is a frozen
+        snapshot (Device._properties), so a plain attribute reassignment
+        alone would not reach the compiled shot; this also re-sets the
+        device_properties entry with overwrite=True so it does.
+        """
+        self.tproc_program_kwargs = tproc_program_kwargs
+        self.set_property(
+            "tproc_program_kwargs", tproc_program_kwargs,
+            location="device_properties", overwrite=True,
+        )
+
     def start_tproc(self, t, duration=1e-6):
         """Start the tProc program at shot-relative time t.
 
