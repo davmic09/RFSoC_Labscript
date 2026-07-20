@@ -1,9 +1,10 @@
 # QICKBoard
 
 A labscript device that triggers a [QICK](https://github.com/openquantumhardware/qick) tProc
-program on an RFSoC board over Pyro4, as part of a labscript shot. Software-trigger MVP: BLACS
-calls `QickProgram.run(soc, start_src="internal")` during `transition_to_buffered` -- no hardware
-trigger pulse yet (see "Limitations" below).
+program on an RFSoC board over Pyro4, as part of a labscript shot. Supports two trigger modes:
+`trigger_mode='software'` (default -- a Pyro4 RPC call fires the program, no wiring needed) and
+`trigger_mode='hardware'` (a real compiled trigger pulse gates the tProc's own external-start
+input). See the root repo README for full details, including hardware-trigger wiring.
 
 ## Install into a labscript-suite environment
 
@@ -54,10 +55,11 @@ qick_board.start_tproc(t=0.5)  # metadata only in this MVP -- see Limitations
 
 ## Limitations (by design, this pass)
 
-- **Software trigger only.** The Pyro4 RPC fires whenever BLACS's queue manager reaches that
-  step during `transition_to_buffered` -- not deterministically at the shot-relative time passed
-  to `start_tproc(t)`. Real hardware-timed triggering (via the board's PMOD external-start pin)
-  is a planned follow-up, not yet implemented.
+- **`trigger_mode` is fixed per connection table, not per shot** -- read once at BLACS tab-init
+  time, not re-read from each submitted shot's file.
+- **Hardware-trigger mode's actual trigger detection is unverified over a real wire** -- confirmed
+  the worker arms correctly and the shot compiles/runs, but not confirmed with a scope that the
+  physical rising edge is actually detected and the resulting latency. See root README.
 - **No completion detection / data retrieval.** `transition_to_manual` doesn't wait for the tProc
   program to finish or pull back acquired data -- QICK/Pyro4 has no blocking "done" RPC. Both are
   planned follow-ups (a WaitMonitor-based hardware loopback, and a `transition_to_manual`

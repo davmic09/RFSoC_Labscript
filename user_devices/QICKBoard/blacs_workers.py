@@ -50,13 +50,23 @@ class QICKBoardWorker(Worker):
             f"{props['tproc_program_module']}.{props['tproc_program_class']}"
         )
         prog = cls(self.soccfg, props["tproc_program_kwargs"])
-        prog.run(self.soc, load_prog=True, load_envelopes=True, start_src="internal")
+        # In hardware mode this arms the tProc and returns immediately -- it does
+        # NOT block waiting for the trigger (see QickProgram.run()'s docstring).
+        # BLACS starts the master pseudoclock (which fires the real trigger pulse)
+        # only after every device finishes transitioning to buffered, so the board
+        # is guaranteed to already be armed by the time the pulse arrives.
+        start_src = "external" if self.trigger_mode == "hardware" else "internal"
+        prog.run(self.soc, load_prog=True, load_envelopes=True, start_src=start_src)
         return {}
 
     def transition_to_manual(self):
         return True
 
     def abort_buffered(self):
+        if self.trigger_mode == "hardware":
+            # Defensive: don't leave the board waiting for a trigger that a
+            # subsequent shot/manual operation may never send.
+            self.soc.start_src("internal")
         return True
 
     def abort_transition_to_buffered(self):

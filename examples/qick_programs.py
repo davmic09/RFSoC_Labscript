@@ -58,3 +58,45 @@ DEFAULT_CONFIG = {
     "adc_trig_offset": 100,
     "soft_avgs": 1,
 }
+
+
+class HardwareTriggeredPulseProgram(AveragerProgram):
+    """Plays one constant pulse immediately on start.
+
+    Meant to be run with QICKBoard(trigger_mode='hardware') -- the tProc's
+    external-start gating (start_src='external', PMOD1 pin 0) is what makes
+    this "triggered": the whole program, including this pulse, only begins
+    once a real rising edge arrives on that pin. By the time body() executes,
+    the trigger has already happened -- there is no separate in-program wait
+    instruction, since tProc v1's external start is a whole-program gate, not
+    a body-level branch.
+    """
+
+    def initialize(self):
+        cfg = self.cfg
+        res_ch = cfg["res_ch"]
+
+        self.declare_gen(ch=res_ch, nqz=1)
+        freq = self.freq2reg(cfg["pulse_freq"], gen_ch=res_ch)
+        phase = self.deg2reg(cfg.get("res_phase", 0), gen_ch=res_ch)
+        length = self.us2cycles(cfg["pulse_length_us"], gen_ch=res_ch)
+        self.set_pulse_registers(
+            ch=res_ch, style="const", freq=freq, phase=phase,
+            gain=cfg["pulse_gain"], length=length,
+        )
+
+        self.synci(200)
+
+    def body(self):
+        self.pulse(ch=self.cfg["res_ch"])
+        self.wait_all()
+
+
+HARDWARE_TRIGGER_CONFIG = {
+    "res_ch": 0,
+    "pulse_freq": 110,        # MHz
+    "pulse_gain": 3000,
+    "pulse_length_us": 1.0,   # microseconds
+    "res_phase": 0,
+    "reps": 1,
+}

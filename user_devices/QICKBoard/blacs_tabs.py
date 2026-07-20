@@ -10,7 +10,7 @@ class QICKBoardTab(DeviceTab):
         props = self.connection_table_properties
         self.status_label = QtWidgets.QLabel(
             f"QICK @ {props['ns_host']}:{props['ns_port']}/{props['proxy_name']} "
-            f"({props['board_model']})"
+            f"({props['board_model']}, trigger_mode={props['trigger_mode']})"
         )
         self.get_tab_layout().addWidget(self.status_label)
         self.supports_smart_programming(False)
@@ -21,6 +21,7 @@ class QICKBoardTab(DeviceTab):
             "ns_host": props["ns_host"],
             "ns_port": props["ns_port"],
             "proxy_name": props["proxy_name"],
+            "trigger_mode": props["trigger_mode"],
         }
         self.create_worker(
             "main_worker",
