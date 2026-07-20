@@ -22,9 +22,11 @@ input). See the root repo README for full details, including hardware-trigger wi
    its worker subprocesses (BLACS spawns workers via its own process-launching mechanism, not
    simple inheritance). If you rely on this fallback, verify it actually reaches the worker (check
    for `ModuleNotFoundError: No module named 'qick'` in BLACS's log) rather than assuming it works.
-3. On the RFSoC board itself, a Pyro4 nameserver + QICK proxy server must already be running and
-   reachable over the network -- see `../board_setup/setup_qick_board.sh` in this repo to set
-   that up on a new board.
+3. On the RFSoC board itself, a Pyro4 nameserver + QICK proxy server must be running and reachable
+   over the network -- see `../board_setup/setup_qick_board.sh` in this repo to set that up on a
+   new board (one time). After that, pass `auto_setup=True` (see below) and BLACS will bring the
+   server back up itself on every startup if it's ever down, instead of needing that as a repeated
+   manual step. `auto_setup=True` needs `pip install paramiko` in the BLACS environment.
 
 ## Connection table usage
 
@@ -60,6 +62,24 @@ connection table, omit that argument from the constructor and call
 from runmanager globals). See the root README's "Tracking pulse parameters as runmanager globals"
 section -- there's a real gotcha around *where* you do this if the same file is also BLACS's own
 connection table.
+
+## Auto-setup (no manual SSH step before starting BLACS)
+
+```python
+qick_board = QICKBoard(
+    name='qick_board', ns_host=..., ns_port=..., proxy_name=..., board_model=...,
+    auto_setup=True, ssh_user='xilinx', board_env_name='RFSoC4x2',
+    remote_qick_repo_path='/home/xilinx/jupyter_notebooks/amo_qick',
+    ...
+)
+```
+
+The worker's `init()` checks whether the board's server is reachable and, if not, SSHes in (via
+`paramiko`) and launches it automatically. Set `QICK_BOARD_SSH_PASSWORD` in BLACS's environment
+before starting it -- deliberately not a connection-table property, since that would land in
+every compiled shot's HDF5 file. Verified end-to-end through a real BLACS startup with the board's
+server intentionally killed beforehand: ~20s to detect, launch, and connect, with zero other
+manual steps. See the root README for the fuller writeup.
 
 ## Limitations (by design, this pass)
 

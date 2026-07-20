@@ -32,7 +32,9 @@ labscript suite to fix this (idempotent, safe to re-run; `--check` reports witho
 
 You'll also need `Pyro4` and `psutil` installed in whatever Python environment runs BLACS
 (`pip install Pyro4 psutil`) -- these aren't labscript dependencies, they're what `QICKBoard`'s
-worker uses to talk to the board.
+worker uses to talk to the board. If you use `auto_setup=True` (see below), also
+`pip install paramiko` -- used for the worker's SSH-based auto-launch, in preference to requiring
+an external SSH client (PuTTY, OpenSSH) to be installed and on `PATH`.
 
 ## Integrating QICKBoard into an already-working labscript-suite install
 
@@ -49,9 +51,10 @@ labscript profile with an apparatus set up (a working connection table, even wit
    `user_devices/QICKBoard/README.md` for a documented (less reliable) environment-variable
    fallback.
 
-3. **Set up the Pyro4 server on the RFSoC board itself.** The board needs a Pyro4 nameserver +
-   QICK proxy server running and reachable over the network *before* BLACS can talk to it. On the
-   board (via SSH or a JupyterLab terminal):
+3. **Set up the Pyro4 server on the RFSoC board itself, at least once.** The board needs a Pyro4
+   nameserver + QICK proxy server running and reachable over the network *before* BLACS can talk
+   to it. On the board (via SSH or a JupyterLab terminal), one time, to install the matching `qick`
+   package and confirm the launch sequence works at all:
    ```
    sudo ./board_setup/setup_qick_board.sh /path/to/qick/checkout/on/the/board
    ```
@@ -65,6 +68,9 @@ labscript profile with an apparatus set up (a working connection table, even wit
    ns = Pyro4.locateNS(host="<board IP>", port=8000)
    print(ns.list())  # should show your proxy_name registered
    ```
+   After this one-time setup, `QICKBoard(auto_setup=True, ...)` (below) can bring the server back
+   up automatically on every BLACS startup, without repeating this step by hand -- but the very
+   first "does the launch sequence even work on this board" check is worth doing manually once.
 
 4. **Write a tProc program.** `QICKBoard` runs a plain `QickProgram`/`AveragerProgram` subclass
    you provide -- it has no built-in pulse sequence. Put it somewhere importable from your BLACS
@@ -111,6 +117,39 @@ labscript profile with an apparatus set up (a working connection table, even wit
    (its own "recompile connection table" menu option does this, or you can do it headlessly --
    see `compile_shot.py` in this repo for the pattern). Confirm the `qick_board` tab appears in
    BLACS with no errors before proceeding.
+
+## Auto-setup: no more manual SSH step before starting BLACS
+
+Pass `auto_setup=True` (plus `board_env_name`, `remote_qick_repo_path`, and optionally `ssh_host`/
+`ssh_user`) to `QICKBoard(...)`, and the BLACS worker's `init()` -- which runs whenever BLACS
+starts up and instantiates the device's tab -- checks whether the board's Pyro4 server is already
+reachable, and if not, SSHes in and launches it automatically (mirroring
+`board_setup/setup_qick_board.sh`'s launch step, not its one-time `qick`-package-install step,
+which isn't safe or necessary to redo on every BLACS startup):
+
+```python
+qick_board = QICKBoard(
+    name='qick_board', ns_host=..., ns_port=..., proxy_name=..., board_model=...,
+    auto_setup=True,
+    ssh_user='xilinx',                 # default -- PYNQ's default account
+    board_env_name='RFSoC4x2',         # or 'ZCU216', etc. -- must match the board
+    remote_qick_repo_path='/home/xilinx/jupyter_notebooks/amo_qick',
+    ...
+)
+```
+
+Set the `QICK_BOARD_SSH_PASSWORD` environment variable wherever BLACS runs, *before* starting it
+-- deliberately not a connection-table property, since that would write the password into every
+compiled shot's HDF5 file. If the server's already up, this adds under a second to `init()` (a
+quick reachability check, nothing else). If it's down, expect ~20-25s (SSH in, launch, wait for
+the FPGA overlay to load and the server to register itself) -- **verified end-to-end through a
+real BLACS startup**: killed the board's server, restarted BLACS with no other manual step, and
+the `qick_board` tab initialized cleanly in ~20s with the server back up, both via a standalone
+worker test and through BLACS's actual queue/tab lifecycle.
+
+If SSH fails, or the server still isn't reachable ~40s after launching, `init()` raises a clear
+error (not a silent hang) -- check `pyro_service.log` on the board directly for the actual cause,
+using the same gotchas list in `board_setup/setup_qick_board.sh`'s header comment.
 
 ## Operating the RFSoC from a labscript experiment
 

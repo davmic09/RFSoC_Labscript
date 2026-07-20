@@ -26,6 +26,8 @@ class QICKBoard(TriggerableDevice):
         property_names={
             "connection_table_properties": [
                 "ns_host", "ns_port", "proxy_name", "board_model", "trigger_mode",
+                "auto_setup", "ssh_host", "ssh_user", "board_env_name",
+                "remote_qick_repo_path", "pynq_venv_path",
             ],
             "device_properties": [
                 "tproc_program_module", "tproc_program_class", "tproc_program_kwargs",
@@ -37,6 +39,8 @@ class QICKBoard(TriggerableDevice):
         ns_host, ns_port=8888, proxy_name="myqick", board_model="rfsoc4x2",
         trigger_mode="software", parent_device=None, connection=None,
         tproc_program_module=None, tproc_program_class=None, tproc_program_kwargs=None,
+        auto_setup=False, ssh_host=None, ssh_user="xilinx", board_env_name=None,
+        remote_qick_repo_path=None, pynq_venv_path="/usr/local/share/pynq-venv",
         **kwargs,
     ):
         """QICK-controlled RFSoC board.
@@ -57,6 +61,25 @@ class QICKBoard(TriggerableDevice):
                 subclass to run (importable from the BLACS worker process)
             tproc_program_class (str): name of the QickProgram subclass within that module
             tproc_program_kwargs (dict, optional): kwargs passed to the program's cfg dict
+            auto_setup (bool): if True, the BLACS worker checks whether the board's
+                Pyro4 server is reachable during init(), and if not, SSHes in and
+                launches it automatically (replicating board_setup/setup_qick_board.sh),
+                instead of requiring that as a manual prior step. Default False --
+                opt in explicitly, since this means BLACS's own initialization now
+                depends on SSH reaching the board. Requires ssh_host/ssh_user/
+                board_env_name/remote_qick_repo_path below, and the
+                QICK_BOARD_SSH_PASSWORD environment variable (deliberately NOT a
+                connection-table property -- that would write the password into every
+                compiled shot's HDF5 file).
+            ssh_host (str, optional): SSH host for auto_setup. Defaults to ns_host.
+            ssh_user (str): SSH username for auto_setup. Default 'xilinx' (PYNQ default).
+            board_env_name (str, optional): BOARD environment variable value for
+                auto_setup (e.g. 'RFSoC4x2', 'ZCU216') -- required if auto_setup=True.
+            remote_qick_repo_path (str, optional): path to the qick checkout on the
+                board (containing qick_lib/ and pyro4/pyro_service.py) -- required if
+                auto_setup=True.
+            pynq_venv_path (str): path to the PYNQ venv on the board. Default
+                '/usr/local/share/pynq-venv' (standard PYNQ image location).
         """
         if tproc_program_module is None or tproc_program_class is None:
             raise LabscriptError(
@@ -77,11 +100,22 @@ class QICKBoard(TriggerableDevice):
                 f"QICKBoard {name}: trigger_mode='software' takes no parent_device "
                 "(there is no compiled pulse -- the Pyro4 RPC call is the trigger)."
             )
+        if auto_setup and (board_env_name is None or remote_qick_repo_path is None):
+            raise LabscriptError(
+                f"QICKBoard {name}: auto_setup=True requires board_env_name and "
+                "remote_qick_repo_path."
+            )
 
         self.BLACS_connection = f"{ns_host}:{ns_port}/{proxy_name}"
         self.trigger_mode = trigger_mode
         self.tproc_program_kwargs = tproc_program_kwargs or {}
         self._software_trigger_time = None
+        self.auto_setup = auto_setup
+        self.ssh_host = ssh_host or ns_host
+        self.ssh_user = ssh_user
+        self.board_env_name = board_env_name
+        self.remote_qick_repo_path = remote_qick_repo_path
+        self.pynq_venv_path = pynq_venv_path
 
         if trigger_mode == "software":
             TriggerableDevice.__init__(self, name, None, None, parentless=True, **kwargs)
