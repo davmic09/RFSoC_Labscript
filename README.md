@@ -6,8 +6,12 @@ labscript experiment shot.
 
 ## What's in this repo
 
-- **`user_devices/QICKBoard/`** -- the labscript device itself (connection-table class, BLACS
-  worker/tab, registration). Drop this into any labscript profile's `user_devices` folder.
+- **`QICKBoard` itself** (connection-table class, BLACS worker/tab, registration) lives in the
+  [`labscript-devices`](https://github.com/labscript-suite/labscript-devices) repo at
+  `labscript_devices/QICKBoard/`, `pip install -e`'d into this profile's venv (see "Integrating
+  QICKBoard" below) -- not copied into this repo's `user_devices/`. Its own
+  `register_classes.py`/`blacs_tabs.py` reference `labscript_devices.QICKBoard...`, so it must
+  actually be part of the installed `labscript_devices` package.
 - **`board_setup/`** -- scripts to set up the Pyro4 control server on a PYNQ-based RFSoC board
   (RFSoC4x2, ZCU216, ZCU111, ...) so a labscript `QICKBoard` can reach it over the network.
 - **`examples/`** -- runnable examples. Verified against real RFSoC4x2 hardware through
@@ -41,15 +45,17 @@ an external SSH client (PuTTY, OpenSSH) to be installed and on `PATH`.
 Assumes you already have labscript-suite (labscript, BLACS, runmanager) installed and a
 labscript profile with an apparatus set up (a working connection table, even without QICKBoard).
 
-1. **Copy the device into your profile.** Copy `user_devices/QICKBoard/` into your labscript
-   profile's `user_devices` directory -- the path your labconfig's `user_devices` setting points
-   at, typically `<labscript-suite>/userlib/user_devices/QICKBoard/`.
+1. **Install `QICKBoard` as part of `labscript_devices`.** `pip uninstall labscript-devices` (if
+   installed from PyPI), then `pip install -e /path/to/labscript-devices` (a checkout of
+   [`labscript-devices`](https://github.com/labscript-suite/labscript-devices) containing
+   `labscript_devices/QICKBoard/`) into the same venv BLACS runs in. Verify with
+   `python -c "from labscript_devices.QICKBoard.labscript_devices import QICKBoard"`.
 
 2. **Make `qick` importable in your BLACS environment.** `pip install -e /path/to/your/qick`
    (a clone of `openquantumhardware/qick` or a fork -- needs a `qick_lib/` directory and a
    `setup.py`) into the same venv BLACS runs in. This is the reliable option; see
-   `user_devices/QICKBoard/README.md` for a documented (less reliable) environment-variable
-   fallback.
+   `labscript_devices/QICKBoard/README.md` (in the labscript-devices repo) for a documented
+   (less reliable) environment-variable fallback.
 
 3. **Set up the Pyro4 server on the RFSoC board itself, at least once.** The board needs a Pyro4
    nameserver + QICK proxy server running and reachable over the network *before* BLACS can talk
@@ -96,7 +102,7 @@ labscript profile with an apparatus set up (a working connection table, even wit
    `trigger_mode='software'` (default, shown here) needs no wiring; `trigger_mode='hardware'`
    needs a real trigger wire and is covered in its own section below.
    ```python
-   from user_devices.QICKBoard.labscript_devices import QICKBoard
+   from labscript_devices.QICKBoard.labscript_devices import QICKBoard
 
    qick_board = QICKBoard(
        name='qick_board',

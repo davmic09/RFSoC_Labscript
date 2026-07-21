@@ -30,7 +30,7 @@ identical requirement here, just against a different board.
 from labscript import start, stop
 from labscript_devices.PrawnBlaster.labscript_devices import PrawnBlaster
 from labscript_devices.DummyIntermediateDevice import DummyIntermediateDevice
-from user_devices.QICKBoard.labscript_devices import QICKBoard
+from labscript_devices.QICKBoard.labscript_devices import QICKBoard
 
 # Master pseudoclock -- reuses the same real PrawnBlaster hardware (COM7) as
 # the RFSoC4x2 example. clockline[0]'s physical output pin (Pico GPIO 9) is

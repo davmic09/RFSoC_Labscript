@@ -11,7 +11,7 @@ in qick_programs.py for the actual tProc program that runs on the board.
 from labscript import start, stop, DigitalOut
 from labscript_devices.PrawnBlaster.labscript_devices import PrawnBlaster
 from labscript_devices.DummyIntermediateDevice import DummyIntermediateDevice
-from user_devices.QICKBoard.labscript_devices import QICKBoard
+from labscript_devices.QICKBoard.labscript_devices import QICKBoard
 
 # Master pseudoclock -- real PrawnBlaster hardware on COM7. Re-verify the COM
 # port with `python -m serial.tools.list_ports -v` if this has changed since.
