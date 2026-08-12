@@ -1,0 +1,16 @@
+{
+  "decimated_fs_mhz": 307.2,
+  "n_loop": 20,
+  "n_samples_per_seg": 200,
+  "f_start_mhz": 110.0,
+  "f_stop_mhz": 110.0,
+  "ro_freq_mhz": 0,
+  "ro_len_us": 0.65,
+  "flat_len_us": 1.4000000000000001,
+  "trig_time_us": 0.65,
+  "gain": 1.0,
+  "gen_ch": 0,
+  "ro_ch": 10,
+  "bitfile": "/home/xilinx/jupyter_notebooks/amo_qick/tests/rf_board_firmware/d_1.bit",
+  "dummypulse_flush": true
+}

@@ -1,0 +1,12 @@
+{
+  "decimated_fs_mhz": 307.2,
+  "n_samples": 246,
+  "f1_mhz": 109.98484900015356,
+  "f2_mhz": 110.01515099984644,
+  "seg_len_us": 1.0,
+  "pre_us": 0.05,
+  "post_us": 0.75,
+  "gen_ch": 0,
+  "ro_ch": 10,
+  "bitfile": "/home/xilinx/jupyter_notebooks/amo_qick/tests/rf_board_firmware/d_1.bit"
+}

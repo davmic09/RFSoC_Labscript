@@ -22,14 +22,18 @@ and the RFSoC's DAC 0 output (or PMOD1 pin 0 itself) for the resulting
 measured -- see the project README's "Current limitations" for what's
 verified vs. not.
 
-PULSE PARAMETERS ARE RUNMANAGER GLOBALS: res_ch, pulse_freq, pulse_gain,
-pulse_length_us, res_phase, reps below are bare names, not literals --
-runmanager resolves them from its globals system and records the actual
-values used into this shot's own /globals group, so they're tracked per-shot
-rather than fixed in the connection table. Define them as globals in
-runmanager before loading this script (Add group -> add each name -> set a
-value), or see create_test_globals_file() in this repo's dev/test tooling
-for a headless equivalent.
+THE TPROC PROGRAM ITSELF IS ALSO A RUNMANAGER GLOBAL, not just its pulse
+parameters: tproc_program_module, tproc_program_class, res_ch, pulse_freq,
+pulse_gain, pulse_length_us, res_phase, reps below are all bare names, not
+literals -- runmanager resolves them from its globals system and records the
+actual values used into this shot's own /globals group. This means which
+tProc script runs -- not just its cfg values -- is chosen per-shot rather
+than fixed in the connection table (QICKBoard's tproc_program_module/class
+are left unset at construction below; qick_board.set_tproc_program() sets
+them here instead). Define all of these as globals in runmanager before
+loading this script (Add group -> add each name -> set a value), or see
+create_test_globals_file() in this repo's dev/test tooling for a headless
+equivalent.
 """
 from labscript import start, stop
 from labscript_devices.PrawnBlaster.labscript_devices import PrawnBlaster
@@ -54,17 +58,26 @@ qick_board = QICKBoard(
     trigger_mode='hardware',
     parent_device=qick_trigger_intermediate,
     connection='port0/line0',
-    tproc_program_module='labscriptlib.RFSoCLabscript.qick_programs',
-    tproc_program_class='HardwareTriggeredPulseProgram',
-    # No tproc_program_kwargs here -- set below from runmanager globals via
-    # set_tproc_program_kwargs(), so the real per-shot values get tracked in
-    # the shot's HDF5 file. A connection-table-only import (BLACS's own
-    # "recompile connection table" step) never reaches that call, so no
-    # globals are needed just to build the connection table.
+    # Must match connection_table.py's own qick_board wiring exactly --
+    # BLACS rejects a shot whose connection_table_properties differ from its
+    # currently loaded connection table ("not a subset of the experimental
+    # control apparatus"), and auto_setup/board_env_name/remote_qick_repo_path
+    # are connection_table_properties (unlike tproc_program_module/class/
+    # kwargs below, which are device_properties and can safely vary per shot).
+    auto_setup=True,
+    ssh_user='xilinx',
+    board_env_name='RFSoC4x2',
+    remote_qick_repo_path='/home/xilinx/jupyter_notebooks/amo_qick',
+    # No tproc_program_module/class/kwargs here -- all set below from
+    # runmanager globals via set_tproc_program(), so both which script runs
+    # and its per-shot values get tracked in the shot's HDF5 file. A
+    # connection-table-only import (BLACS's own "recompile connection table"
+    # step) never reaches that call, so no globals are needed just to build
+    # the connection table.
 )
 
 start()
-qick_board.set_tproc_program_kwargs({
+qick_board.set_tproc_program(tproc_program_module, tproc_program_class, {
     "res_ch": res_ch, "pulse_freq": pulse_freq, "pulse_gain": pulse_gain,
     "pulse_length_us": pulse_length_us, "res_phase": res_phase, "reps": reps,
 })
